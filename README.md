@@ -1,3 +1,3 @@
 # dear-content
 
-spook-from-a-distance, content-addressed, filesystem entanglement
+spooky-from-a-distance, content-addressed, filesystem entanglement
