@@ -3,25 +3,36 @@ package main
 import (
   "net/rpc"
   "fmt"
-  "io"
+  "os"
 )
 
 /* 
     TODO: 
-    Allow different remote procedures to be callable
     Introduce peer-to-peer logic 
 */
 
-/*
-func readResponse(res io.Reader) string {
-  data := make([]byte, 512)
-  length, err := res.Read(data)
+func listRemote(client *rpc.Client) {
+  var res Response
+  command := &Command{}
+  err := client.Call("Node.List", command, &res)
   if err != nil {
-    panic("response not right")
+    panic(err)
   }
-  return string(data[:length])
+  fmt.Println(res.Body)
 }
-*/
+
+func getRemote(client *rpc.Client) {
+  var res Response
+  if len(os.Args) < 4 {
+    fmt.Println("Not enough arguments :(")
+  }
+  command := &Command{os.Args[3]}
+  err := client.Call("Node.Get", command, &res)
+  if err != nil {
+    panic(err)
+  }
+  fmt.Println(res.Body)
+}
 
 func client() {
 
@@ -29,13 +40,18 @@ func client() {
   if err != nil {
     panic("cannot dial")
   }
-
-  command := &Command{"My name is Wil"}
-  var res Response
-  err = cli.Call("Node.Run", command, &res)
-  if err != nil {
-    panic("could'n call command")
+  if len(os.Args) < 3 {
+    panic("not enough arguments")
   }
-  fmt.Printf("Got: %s", res.Body)
+  switch os.Args[2] {
+    case "list":
+      listRemote(cli)
+    case "get":
+      getRemote(cli)
+    default:
+      fmt.Println("Unrecognized command")
+      fmt.Println(os.Args[2])
+  }
+
   cli.Close()
 }
