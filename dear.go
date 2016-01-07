@@ -166,13 +166,28 @@ func broadcastRequests() {
   }
 }
 
+func getIP() string{
+   addrs, err := net.InterfaceAddrs()
+   if err != nil {
+     panic(err)
+   }
+    for _, addr := range addrs {
+      ip := strings.Split(addr.String(), "/")[0]
+      nums := strings.Split(ip, ".")
+      if (nums[0] == "192" && nums[1] == "168") {
+        return ip
+     }
+   }
+   return "localhost"
+ }
+
 func main() {
 
   listener, err := net.Listen("tcp", ":0")
   if err != nil {
     panic(err)
   }
-  laddr = listener.Addr().String()
+  laddr = getIP()
   fmt.Printf("listening on %s\n", laddr)
   stdin := bufio.NewScanner(os.Stdin)
 
