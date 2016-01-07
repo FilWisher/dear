@@ -50,9 +50,38 @@ func handleConnection(conn net.Conn) {
   input := strings.Split(scanner.Text(), " ")
   cmd, args := input[0], input[1:]
   fmt.Printf("received %s %s\n", cmd, args[0])
-  addPeer(args[0])
+  switch cmd {
+    case "ack":
+      addPeer(args[0])
+    case "hello":
+      ack(args[0])
+    case "add":
+      fmt.Println("I received an addition", args)
+    case "query":
+      fmt.Println("I received an query", args)
+    case "get":
+      fmt.Println("I received a get", args)
+    default:
+      fmt.Fprintf(conn, "wagwan")
+  }
 
   conn.Close()
+}
+
+func sendRequests(cmd string, args []string) {
+  sendRequest := makeRequest(cmd, args)
+  for peer := range(peers) {
+    go sendRequest(peer)
+  }
+}
+
+func makeRequest(cmd string, args []string) func(string) {
+  return func (peer string) {
+    conn, err := net.Dial("tcp", peer)
+    check("Couldn't connect to peer", err)
+    fmt.Fprintf(conn, cmd, args)
+    conn.Close()
+  }
 }
 
 func readCommands(scanner *bufio.Scanner) {
@@ -64,7 +93,7 @@ func readCommands(scanner *bufio.Scanner) {
     cmd, args := input[0], input[1:]
     switch cmd {
       case "add":
-        fmt.Println("add", args)
+        sendRequests(cmd, args)
       case "query":
         fmt.Println("query", args)
       case "get":
