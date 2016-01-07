@@ -14,6 +14,8 @@ type Request struct {
   Command string
   Args []string
   Origin string
+  LastSender string
+  Count int
 }
 
 var (
@@ -38,6 +40,8 @@ func greet(addr string) {
     "hello",
     []string{},
     laddr,
+    laddr,
+    0,
   }
   enc.Encode(req)
   conn.Close()
@@ -55,6 +59,8 @@ func ack(addr string) {
     "ack",
     []string{},
     laddr,
+    laddr,
+    0,
   }
   enc.Encode(req)
   conn.Close()
@@ -98,8 +104,12 @@ func handleConnection(conn net.Conn) {
 }
 
 func sendRequests(req Request) {
+  lastSender, count := req.LastSender, req.Count
+  req.LastSender, req.Count = laddr, count + 1
   for peer := range(peers) {
-    go sendRequest(req, peer)
+    if (peer != req.Origin && peer != lastSender && count < 10 /*random num*/) {
+      go sendRequest(req, peer)
+    }
   }
 }
 
@@ -116,6 +126,8 @@ func makeRequest(cmd string, args []string) Request {
     cmd,
     args,
     laddr,
+    laddr,
+    0,
   }
 }
 
