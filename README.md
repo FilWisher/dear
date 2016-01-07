@@ -1,4 +1,4 @@
-# dear-content
+# dear
 
 spooky-at-a-distance, content-addressed, filesystem entanglement
 
