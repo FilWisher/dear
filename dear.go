@@ -7,11 +7,19 @@ import (
   "strings"
   "log"
   "os"
+  "encoding/gob"
 )
+
+type Request struct {
+  Command string
+  Args []string
+  Origin string
+}
 
 var (
   laddr string
   peers = make(map[string]bool)
+  requests = make(chan Request)
 )
 
 func check(msg string, err error) {
@@ -25,7 +33,13 @@ func greet(addr string) {
   /* TODO: if err, don't try and check anyway */
   conn, err := net.Dial("tcp", addr)
   check("could not connect", err)
-  fmt.Fprintf(conn, "hello %s\n", laddr)
+  enc := gob.NewEncoder(conn)
+  req := Request{
+    "hello",
+    []string{},
+    laddr,
+  }
+  enc.Encode(req)
   conn.Close()
 }
 
@@ -33,8 +47,16 @@ func ack(addr string) {
   /* TODO: if err, don't try and check anyway */
   conn, err := net.Dial("tcp", addr)
   check("could not connect", err)
-  fmt.Fprintf(conn, "ack %s\n", laddr)
+
   addPeer(addr)
+
+  enc := gob.NewEncoder(conn)
+  req := Request{
+    "ack",
+    []string{},
+    laddr,
+  }
+  enc.Encode(req)
   conn.Close()
 }
 
@@ -43,24 +65,31 @@ func addPeer(addr string) {
 }
 
 func handleConnection(conn net.Conn) {
-  /* TODO: don't presume everything received is ack */
-  scanner := bufio.NewScanner(conn)
-  scanner.Scan()
-  /* TODO: check error */
-  input := strings.Split(scanner.Text(), " ")
-  cmd, args := input[0], input[1:]
-  fmt.Printf("received %s %s\n", cmd, args[0])
-  switch cmd {
+  var req Request
+  dec := gob.NewDecoder(conn)
+  err := dec.Decode(&req)
+  if err != nil {
+    log.Println(err)
+    return
+  }
+
+  fmt.Printf("received %s %s\n", req.Command, req.Origin)
+  switch req.Command {
     case "ack":
-      addPeer(args[0])
+      addPeer(req.Origin)
     case "hello":
-      ack(args[0])
+      ack(req.Origin)
     case "add":
-      fmt.Println("I received an addition", args)
+      fmt.Println("I received an addition", req.Args)
+      requests <- req
     case "query":
-      fmt.Println("I received an query", args)
+      /* TODO: also satisfy */
+      fmt.Println("I received an query", req.Args)
+      requests <- req
     case "get":
-      fmt.Println("I received a get", args)
+      /* TODO: only if not satisfied */
+      fmt.Println("I received a get", req.Args)
+      requests <- req
     default:
       fmt.Fprintf(conn, "wagwan")
   }
@@ -68,19 +97,25 @@ func handleConnection(conn net.Conn) {
   conn.Close()
 }
 
-func sendRequests(cmd string, args []string) {
-  sendRequest := makeRequest(cmd, args)
+func sendRequests(req Request) {
   for peer := range(peers) {
-    go sendRequest(peer)
+    go sendRequest(req, peer)
   }
 }
 
-func makeRequest(cmd string, args []string) func(string) {
-  return func (peer string) {
-    conn, err := net.Dial("tcp", peer)
-    check("Couldn't connect to peer", err)
-    fmt.Fprintf(conn, cmd, args)
-    conn.Close()
+func sendRequest(req Request, peer string) {
+  conn, err := net.Dial("tcp", peer)
+  check("Couldn't connect to peer", err)
+  enc := gob.NewEncoder(conn)
+  enc.Encode(req)
+  conn.Close()
+}
+
+func makeRequest(cmd string, args []string) Request {
+  return Request{
+    cmd,
+    args,
+    laddr,
   }
 }
 
@@ -93,11 +128,11 @@ func readCommands(scanner *bufio.Scanner) {
     cmd, args := input[0], input[1:]
     switch cmd {
       case "add":
-        sendRequests(cmd, args)
+        requests <- makeRequest(cmd, args)
       case "query":
-        fmt.Println("query", args)
+        requests <- makeRequest(cmd, args)
       case "get":
-        fmt.Println("get", args)
+        requests <- makeRequest(cmd, args)
       case "greet":
         greet(args[0])
       case "peers":
@@ -112,6 +147,13 @@ func readCommands(scanner *bufio.Scanner) {
   }
 }
 
+func broadcastRequests() {
+  for {
+    req := <-requests
+    sendRequests(req)
+  }
+}
+
 func main() {
 
   listener, err := net.Listen("tcp", ":0")
@@ -123,6 +165,7 @@ func main() {
   stdin := bufio.NewScanner(os.Stdin)
 
   go readCommands(stdin)
+  go broadcastRequests()
 
   for {
     conn, err := listener.Accept()
